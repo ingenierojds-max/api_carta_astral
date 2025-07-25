@@ -1,10 +1,14 @@
+# --- Contenido NUEVO y CORREGIDO para el archivo: download_eph.py ---
+
 import os
 import requests
 import zipfile
 import io
 
 # URL del archivo zip de las efemérides básicas de Swiss Ephemeris
-EPH_URL = "https://www.astro.com/ftp/swisseph/ephe/sweph.zip"
+# La URL anterior daba error 404. Esta es la nueva dirección correcta.
+EPH_URL = "https://www.astro.com/ftp/swisseph/sweph.zip"  # <--- ¡ESTA ES LA LÍNEA QUE CORREGIMOS!
+
 # Directorio donde guardaremos los archivos
 EPH_PATH = "ephe"
 
@@ -20,9 +24,9 @@ def download_and_extract_eph():
     os.makedirs(EPH_PATH)
 
     try:
-        print(f"Descargando desde: {EPH_URL}")
+        print(f"Descargando desde la nueva URL: {EPH_URL}")
         response = requests.get(EPH_URL, stream=True)
-        response.raise_for_status()  # Lanza un error si la descarga falla
+        response.raise_for_status()  # Lanza un error si la descarga falla (ej. 404)
 
         # Usamos io.BytesIO para tratar el contenido descargado como un archivo en memoria
         with zipfile.ZipFile(io.BytesIO(response.content)) as z:
