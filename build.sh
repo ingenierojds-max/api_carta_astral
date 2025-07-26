@@ -20,7 +20,7 @@ python download_eph.py
 
 # Verificar instalación de pyswisseph
 echo "Verificando pyswisseph..."
-python -c "import sys; sys.path.append('$APP_DIR'); import carta_app.py; print('✓ carta_app importado correctamente')"
+python -c "import sys; sys.path.append('$APP_DIR'); import carta_app ; print('✓ carta_app importado correctamente')"
 
 # Verificar que los archivos fueron creados
 echo "Verificando archivos de efemérides..."
