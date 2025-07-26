@@ -7,7 +7,6 @@ echo "=== Iniciando build de Carta Astral Expandida ==="
 echo "Instalando dependencias..."
 pip install --no-cache-dir -r requirements.txt
 
-
 # Crear directorio de efemérides si no existe
 echo "Creando directorio de efemérides..."
 mkdir -p ephe
@@ -18,7 +17,7 @@ python download_eph.py
 
 # Verificar instalación de pyswisseph
 echo "Verificando pyswisseph..."
-python -c "import carta_app; print('Importación exitosa')"
+python carta_app.py --test-import
 
 # Verificar que los archivos fueron creados
 echo "Verificando archivos de efemérides..."
