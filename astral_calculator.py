@@ -2,9 +2,6 @@
 
 import swisseph as swe
 
-# La clase BaseModel no es necesaria aquí, pero si la usáramos para type-hinting,
-# la importaríamos. Por simplicidad, asumimos que 'data' tiene los atributos correctos.
-
 def realizar_calculo_astral(data):
     """
     Motor de cálculo de la carta astral.
@@ -12,7 +9,7 @@ def realizar_calculo_astral(data):
     Lanza un ValueError si los datos de entrada no son válidos.
     """
     
-    # 1. Validar fechas (Esta lógica ahora vive aquí)
+    # 1. Validar fechas
     if not (1900 <= data.anio <= 2100):
         raise ValueError("Año debe estar entre 1900 y 2100")
     if not (1 <= data.mes <= 12):
@@ -24,20 +21,26 @@ def realizar_calculo_astral(data):
     if not (0 <= data.minuto <= 59):
         raise ValueError("Minuto debe estar entre 0 y 59")
     
-    # 2. Calcula el Día Juliano (UT) a partir de los datos de entrada
     jd_ut = swe.julday(data.anio, data.mes, data.dia, data.hora + data.minuto / 60.0)
     
+    # =======================================================================
+    # ======> AQUÍ ESTÁ LA CORRECCIÓN: Nombres de planetas actualizados <======
+    # =======================================================================
     planetas = {
-        "Sol": swe.SOL, "Luna": swe.LUNA, "Mercurio": swe.MERCURIO,
-        "Venus": swe.VENUS, "Marte": swe.MARTE, "Júpiter": swe.JUPITER,
-        "Saturno": swe.SATURNO, "Urano": swe.URANO, "Neptuno": swe.NEPTUNO,
-        "Plutón": swe.PLUTON
+        "Sol": swe.SE_SUN, 
+        "Luna": swe.SE_MOON, 
+        "Mercurio": swe.SE_MERCURY,
+        "Venus": swe.SE_VENUS, 
+        "Marte": swe.SE_MARS, 
+        "Júpiter": swe.SE_JUPITER,
+        "Saturno": swe.SE_SATURN, 
+        "Urano": swe.SE_URANUS, 
+        "Neptuno": swe.SE_NEPTUNE,
+        "Plutón": swe.SE_PLUTO
     }
     
     posiciones = {}
     errores = []
-    
-    # Flags para el cálculo: usar efemérides suizas de alta precisión
     flags = swe.FLG_SWIEPH | swe.FLG_SPEED
     
     for nombre, planeta_id in planetas.items():
@@ -48,7 +51,6 @@ def realizar_calculo_astral(data):
             errores.append(f"Error calculando {nombre}: {str(e)}")
             posiciones[nombre] = 0.0
     
-    # 3. Calcular signos zodiacales
     signos = ["Aries", "Tauro", "Géminis", "Cáncer", "Leo", "Virgo", 
              "Libra", "Escorpio", "Sagitario", "Capricornio", "Acuario", "Piscis"]
     
@@ -62,7 +64,6 @@ def realizar_calculo_astral(data):
             "grados_en_signo": round(grados_en_signo, 2)
         }
     
-    # 4. Construir el objeto de resultado final
     resultado = {
         "nombre": data.nombre,
         "fecha_utc": f"{data.dia:02d}/{data.mes:02d}/{data.anio} {data.hora:02d}:{data.minuto:02d}",
@@ -75,5 +76,4 @@ def realizar_calculo_astral(data):
     if errores:
         resultado["advertencias"] = errores
         
-    # 5. Devolver el diccionario con el resultado
     return resultado
