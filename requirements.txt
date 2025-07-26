@@ -2,3 +2,6 @@ fastapi
 uvicorn
 pyswisseph
 requests
+matplotlib
+numpy
+Pillow
