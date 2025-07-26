@@ -1,0 +1,35 @@
+# Usar Python 3.11 como base
+FROM python:3.11-slim
+
+# Instalar dependencias del sistema necesarias para pyswisseph
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Establecer directorio de trabajo
+WORKDIR /app
+
+# Copiar requirements primero para aprovechar caché de Docker
+COPY requirements.txt .
+
+# Instalar dependencias de Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar todo el código
+COPY . .
+
+# Hacer ejecutable el script de build
+RUN chmod +x build.sh
+
+# Ejecutar script de configuración
+RUN ./build.sh
+
+# Exponer puerto
+EXPOSE 8000
+
+# Comando para iniciar la aplicación
+CMD ["uvicorn", "carta_app:app", "--host", "0.0.0.0", "--port", "8000"]
