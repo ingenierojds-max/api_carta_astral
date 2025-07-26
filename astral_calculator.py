@@ -1,4 +1,5 @@
 import swisseph as swe
+import math
 
 def realizar_calculo_astral(data):
     """
@@ -58,35 +59,77 @@ def realizar_calculo_astral(data):
     
     # --- Cálculo del Ascendente (CORREGIDO) ---
     try:
-        # Método 1: Usar directamente el byte string
-        house_cusp, asc, mc = swe.houses(jd_ut, data.lat, data.lng, b'P')[:3]
+        # Método 1: Capturar todos los valores que devuelve swe.houses()
+        resultado_houses = swe.houses(jd_ut, data.lat, data.lng, b'P')
         
-        posiciones["Ascendente"] = asc
-        posiciones["Medio_Cielo"] = mc
-        
+        # swe.houses() devuelve diferentes cantidades de valores según la versión
+        # Típicamente: (house_cusps, ascmc) donde ascmc contiene [Asc, MC, ARMC, Vertex, ...]
+        if len(resultado_houses) >= 2:
+            house_cusps, ascmc = resultado_houses[0], resultado_houses[1]
+            posiciones["Ascendente"] = ascmc[0]  # Ascendente
+            posiciones["Medio_Cielo"] = ascmc[1]  # Medio Cielo
+        else:
+            # Si solo devuelve un valor, intentar extraer de ahí
+            house_cusps = resultado_houses[0]
+            posiciones["Ascendente"] = house_cusps[0] if len(house_cusps) > 0 else 0.0
+            posiciones["Medio_Cielo"] = house_cusps[9] if len(house_cusps) > 9 else 0.0
+            
     except Exception as e:
-        # Si el método 1 falla, intenta métodos alternativos
         try:
-            # Método 2: Usar string encode
-            hsys = 'P'.encode('ascii')
-            house_cusp, asc, mc = swe.houses(jd_ut, data.lat, data.lng, hsys)[:3]
+            # Método 2: Usar string normal (algunas versiones lo aceptan)
+            resultado_houses = swe.houses(jd_ut, data.lat, data.lng, 'P')
             
-            posiciones["Ascendente"] = asc
-            posiciones["Medio_Cielo"] = mc
-            
+            if len(resultado_houses) >= 2:
+                house_cusps, ascmc = resultado_houses[0], resultado_houses[1]
+                posiciones["Ascendente"] = ascmc[0]
+                posiciones["Medio_Cielo"] = ascmc[1]
+            else:
+                house_cusps = resultado_houses[0]
+                posiciones["Ascendente"] = house_cusps[0] if len(house_cusps) > 0 else 0.0
+                posiciones["Medio_Cielo"] = house_cusps[9] if len(house_cusps) > 9 else 0.0
+                
         except Exception as e2:
             try:
-                # Método 3: Usar código numérico (Placidus = P)
-                # En algunas versiones, 'P' corresponde al código numérico
-                house_cusp = swe.houses_ex(jd_ut, flags, data.lat, data.lng, b'P')[0]
-                posiciones["Ascendente"] = house_cusp[0]  # Ascendente es la cúspide de casa 1
-                posiciones["Medio_Cielo"] = house_cusp[9]  # MC es la cúspide de casa 10
+                # Método 3: Usar houses_ex si está disponible
+                resultado_houses_ex = swe.houses_ex(jd_ut, flags, data.lat, data.lng, b'P')
                 
+                if len(resultado_houses_ex) >= 2:
+                    house_cusps, ascmc = resultado_houses_ex[0], resultado_houses_ex[1]
+                    posiciones["Ascendente"] = ascmc[0]
+                    posiciones["Medio_Cielo"] = ascmc[1]
+                else:
+                    posiciones["Ascendente"] = 0.0
+                    posiciones["Medio_Cielo"] = 0.0
+                    
             except Exception as e3:
-                # Si todos los métodos fallan
-                errores.append(f"Error calculando Ascendente: {str(e)}")
-                posiciones["Ascendente"] = 0.0
-                posiciones["Medio_Cielo"] = 0.0
+                # Método 4: Cálculo manual aproximado del Ascendente usando tiempo sidéreo
+                try:
+                    # Tiempo sidéreo en Greenwich
+                    sidt = swe.sidtime(jd_ut)
+                    # Tiempo sidéreo local (aproximado)
+                    local_sidt = (sidt + data.lng / 15.0) % 24.0
+                    
+                    # Fórmula aproximada para el Ascendente
+                    # Esta es una aproximación básica, no tan precisa como houses()
+                    import math
+                    lat_rad = math.radians(data.lat)
+                    lst_rad = math.radians(local_sidt * 15.0)
+                    
+                    # Aproximación del Ascendente
+                    asc_rad = math.atan2(-math.cos(lst_rad), 
+                                        math.sin(lst_rad) * math.cos(lat_rad))
+                    ascendente_aprox = math.degrees(asc_rad) % 360
+                    
+                    posiciones["Ascendente"] = ascendente_aprox
+                    posiciones["Medio_Cielo"] = (local_sidt * 15.0) % 360  # MC aproximado
+                    
+                    errores.append("Usando cálculo aproximado del Ascendente (método manual)")
+                    
+                except Exception as e4:
+                    # Si todo falla
+                    errores.append(f"Error calculando Ascendente: {str(e)} | {str(e2)} | {str(e3)} | {str(e4)}")
+                    posiciones["Ascendente"] = 0.0
+                    posiciones["Medio_Cielo"] = 0.0
 
     # Formatear las posiciones con signos
     signos = ["Aries", "Tauro", "Géminis", "Cáncer", "Leo", "Virgo", 
