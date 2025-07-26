@@ -12,6 +12,7 @@ def realizar_calculo_astral(data):
     # 1. Validar fechas
     if not (1900 <= data.anio <= 2100):
         raise ValueError("Año debe estar entre 1900 y 2100")
+    # ... (el resto de las validaciones de fecha se quedan igual) ...
     if not (1 <= data.mes <= 12):
         raise ValueError("Mes debe estar entre 1 y 12")
     if not (1 <= data.dia <= 31):
@@ -23,24 +24,27 @@ def realizar_calculo_astral(data):
     
     jd_ut = swe.julday(data.anio, data.mes, data.dia, data.hora + data.minuto / 60.0)
     
-    # =======================================================================
-    # ======> AQUÍ ESTÁ LA CORRECCIÓN: Nombres de planetas actualizados <======
-    # =======================================================================
+    # =================================================================================
+    # ======> LA CORRECCIÓN DEFINITIVA: Usar los índices numéricos de los planetas <======
+    # =================================================================================
+    # Estos números son el estándar de la librería y no dependen de nombres que cambian.
+    # Sol=0, Luna=1, Mercurio=2, Venus=3, Marte=4, Júpiter=5, Saturno=6, Urano=7, Neptuno=8, Plutón=9
     planetas = {
-        "Sol": swe.SE_SUN, 
-        "Luna": swe.SE_MOON, 
-        "Mercurio": swe.SE_MERCURY,
-        "Venus": swe.SE_VENUS, 
-        "Marte": swe.SE_MARS, 
-        "Júpiter": swe.SE_JUPITER,
-        "Saturno": swe.SE_SATURN, 
-        "Urano": swe.SE_URANUS, 
-        "Neptuno": swe.SE_NEPTUNE,
-        "Plutón": swe.SE_PLUTO
+        "Sol": 0, 
+        "Luna": 1, 
+        "Mercurio": 2,
+        "Venus": 3, 
+        "Marte": 4, 
+        "Júpiter": 5,
+        "Saturno": 6, 
+        "Urano": 7, 
+        "Neptuno": 8,
+        "Plutón": 9
     }
     
     posiciones = {}
     errores = []
+    # La función swe.calc_ut acepta estos números directamente
     flags = swe.FLG_SWIEPH | swe.FLG_SPEED
     
     for nombre, planeta_id in planetas.items():
@@ -51,6 +55,7 @@ def realizar_calculo_astral(data):
             errores.append(f"Error calculando {nombre}: {str(e)}")
             posiciones[nombre] = 0.0
     
+    # El resto del código no necesita cambios
     signos = ["Aries", "Tauro", "Géminis", "Cáncer", "Leo", "Virgo", 
              "Libra", "Escorpio", "Sagitario", "Capricornio", "Acuario", "Piscis"]
     
