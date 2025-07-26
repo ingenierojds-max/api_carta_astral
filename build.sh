@@ -17,7 +17,8 @@ python download_eph.py
 
 # Verificar instalación de pyswisseph
 echo "Verificando pyswisseph..."
-python carta_app.py --test-import
+python ./carta_app.py --test-import
+
 
 # Verificar que los archivos fueron creados
 echo "Verificando archivos de efemérides..."
