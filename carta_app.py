@@ -11,7 +11,7 @@ from astral_calculator import realizar_calculo_astral
 app = FastAPI()
 
 # ==============================================================================
-# ======>  BLOQUE DE CONFIGURACIÓN DE EFEMÉRIDES (ESTA ES LA SOLUCIÓN)  <======
+# ======>  ¡¡ESTE ES EL BLOQUE MÁS IMPORTANTE Y LA SOLUCIÓN AL ERROR!!  <======
 # ==============================================================================
 # Le decimos a la aplicación dónde están los archivos de datos que descargamos.
 
@@ -35,12 +35,12 @@ except Exception as e:
 # Leer la clave secreta desde las variables de entorno
 API_KEY_SECRET = os.getenv("API_KEY")
 
-# Función "guardián" para la seguridad (esto ya está bien)
+# Función "guardián" para la seguridad
 async def get_api_key(x_api_key: str = Header(...)):
     if x_api_key != API_KEY_SECRET:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-# El modelo de entrada no cambia
+# El modelo de entrada (el "formulario" que espera la API)
 class CartaAstralInput(BaseModel):
     nombre: str
     anio: int
@@ -52,12 +52,12 @@ class CartaAstralInput(BaseModel):
     lat: float
     lng: float
 
-# El endpoint raíz no cambia
+# Endpoint raíz
 @app.get("/")
 def read_root():
     return {"status": "Servidor de Carta Astral funcionando correctamente"}
 
-# El endpoint principal, protegido con la clave de API
+# Endpoint principal, protegido con la clave de API
 @app.post("/carta-astral", dependencies=[Depends(get_api_key)])
 def calcular_carta_astral_endpoint(data: CartaAstralInput):
     """
@@ -69,6 +69,5 @@ def calcular_carta_astral_endpoint(data: CartaAstralInput):
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        # Capturamos cualquier error interno del motor de cálculo
         print(f"ERROR en el motor de cálculo: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno al calcular la carta astral: {str(e)}")
