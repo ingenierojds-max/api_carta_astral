@@ -151,11 +151,17 @@ def realizar_calculo_astral(data):
             "grados_en_signo": round(grados_en_signo, 2)
         }
     
+    # Separar elementos especiales para una estructura más clara
+    ascendente = posiciones_con_signos.pop("Ascendente", {})
+    medio_cielo = posiciones_con_signos.pop("Medio_Cielo", {})
+    
     resultado = {
         "nombre": data.nombre,
         "fecha_hora_calculo": f"{data.dia:02d}/{data.mes:02d}/{data.anio} {data.hora:02d}:{data.minuto:02d}",
         "ciudad": data.ciudad,
         "coordenadas": {"lat": data.lat, "lng": data.lng},
+        "ascendente": ascendente,
+        "medio_cielo": medio_cielo,
         "posiciones_planetarias": posiciones_con_signos,
         "dia_juliano": round(jd_ut, 2)
     }
