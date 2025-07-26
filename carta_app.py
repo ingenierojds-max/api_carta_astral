@@ -1,29 +1,50 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import os
 import uuid
 from datetime import datetime
 import base64
 import io
+from typing import Optional, Dict, Any
 
 # Importar tu módulo de generación de cartas astrales
 from generador_carta_astral_visual import generar_carta_astral_imagen
 
-app = Flask(__name__)
-CORS(app)  # Permitir CORS para N8N
+app = FastAPI(
+    title="Generador de Cartas Astrales",
+    description="API para generar cartas astrales visuales",
+    version="1.0.0"
+)
+
+# Configurar CORS para N8N
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Crear directorio para guardar imágenes si no existe
 os.makedirs("static/cartas", exist_ok=True)
 
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
-    return response
+# Montar archivos estáticos
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.route('/', methods=['GET'])
-def home():
+# Modelo para los datos de entrada
+class DatosCarta(BaseModel):
+    nombre: Optional[str] = "Sin nombre"
+    fecha_nacimiento: Optional[str] = None
+    hora_nacimiento: Optional[str] = None
+    lugar_nacimiento: Optional[str] = None
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
+
+@app.get("/")
+async def home():
     return {
         'aplicacion': 'Generador de Cartas Astrales',
         'version': '1.0',
@@ -31,20 +52,21 @@ def home():
         'endpoints': {
             'generar_carta': '/carta-astral/imagen',
             'test': '/test',
-            'health': '/health'
+            'health': '/health',
+            'docs': '/docs'
         }
     }
 
-@app.route('/health', methods=['GET'])
-def health():
+@app.get("/health")
+async def health():
     return {
         'status': 'ok',
         'timestamp': str(datetime.now()),
         'message': 'Servidor funcionando correctamente'
     }
 
-@app.route('/test', methods=['GET'])
-def test_simple():
+@app.get("/test")
+async def test_simple():
     return {
         'status': 'funcionando',
         'mensaje': 'La aplicación está corriendo correctamente',
@@ -52,32 +74,31 @@ def test_simple():
         'timestamp': str(datetime.now())
     }
 
-@app.route('/carta-astral/imagen', methods=['GET', 'POST'])
-def generar_carta():
-    if request.method == 'GET':
-        return {
-            'status': 'ok',
-            'mensaje': 'Endpoint funcionando correctamente',
-            'metodo_requerido': 'POST',
-            'ejemplo_uso': 'Envía datos por POST para generar la carta astral',
-            'formato_datos': {
-                'nombre': 'Nombre de la persona',
-                'fecha_nacimiento': 'YYYY-MM-DD',
-                'hora_nacimiento': 'HH:MM',
-                'lugar_nacimiento': 'Ciudad, País',
-                'latitud': 'Latitud del lugar',
-                'longitud': 'Longitud del lugar'
-            }
+@app.get("/carta-astral/imagen")
+async def info_generar_carta():
+    return {
+        'status': 'ok',
+        'mensaje': 'Endpoint funcionando correctamente',
+        'metodo_requerido': 'POST',
+        'ejemplo_uso': 'Envía datos por POST para generar la carta astral',
+        'formato_datos': {
+            'nombre': 'Nombre de la persona',
+            'fecha_nacimiento': 'YYYY-MM-DD',
+            'hora_nacimiento': 'HH:MM',
+            'lugar_nacimiento': 'Ciudad, País',
+            'latitud': 'Latitud del lugar',
+            'longitud': 'Longitud del lugar'
         }
-    
+    }
+
+@app.post("/carta-astral/imagen")
+async def generar_carta(datos: DatosCarta, request: Request):
     try:
-        # Obtener datos del request
-        datos = request.json
-        if not datos:
-            return {'error': 'No se enviaron datos'}, 400
+        # Convertir datos del modelo Pydantic a diccionario
+        datos_dict = datos.dict()
         
         # Generar la carta astral (usando tu función existente)
-        imagen = generar_carta_astral_imagen(datos)
+        imagen = generar_carta_astral_imagen(datos_dict)
         
         # Crear nombre único para la imagen
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -89,7 +110,7 @@ def generar_carta():
         imagen.save(ruta_archivo)
         
         # URL completa para acceder a la imagen
-        base_url = request.host_url.rstrip('/')
+        base_url = str(request.base_url).rstrip('/')
         url_imagen = f"{base_url}/static/cartas/{nombre_archivo}"
         
         # También generar versión base64 para N8N
@@ -102,10 +123,10 @@ def generar_carta():
             'success': True,
             'mensaje': 'Carta astral generada exitosamente',
             'datos_procesados': {
-                'nombre': datos.get('nombre', 'No especificado'),
-                'fecha': datos.get('fecha_nacimiento', 'No especificada'),
-                'hora': datos.get('hora_nacimiento', 'No especificada'),
-                'lugar': datos.get('lugar_nacimiento', 'No especificado')
+                'nombre': datos.nombre,
+                'fecha': datos.fecha_nacimiento,
+                'hora': datos.hora_nacimiento,
+                'lugar': datos.lugar_nacimiento
             },
             'imagen': {
                 'nombre_archivo': nombre_archivo,
@@ -126,37 +147,33 @@ def generar_carta():
         return respuesta
         
     except Exception as e:
-        return {
-            'success': False,
-            'error': str(e),
-            'mensaje': 'Error al generar la carta astral',
-            'timestamp': str(datetime.now())
-        }, 500
-
-# Endpoint para servir archivos estáticos (imágenes)
-@app.route('/static/cartas/<filename>')
-def serve_carta_image(filename):
-    try:
-        return send_from_directory('static/cartas', filename)
-    except FileNotFoundError:
-        return {'error': 'Imagen no encontrada'}, 404
+        raise HTTPException(
+            status_code=500,
+            detail={
+                'success': False,
+                'error': str(e),
+                'mensaje': 'Error al generar la carta astral',
+                'timestamp': str(datetime.now())
+            }
+        )
 
 # Endpoint para descargar imágenes
-@app.route('/download/<filename>')
-def download_carta(filename):
-    try:
-        return send_from_directory('static/cartas', filename, as_attachment=True)
-    except FileNotFoundError:
-        return {'error': 'Archivo no encontrado'}, 404
+@app.get("/download/{filename}")
+async def download_carta(filename: str):
+    file_path = f"static/cartas/{filename}"
+    if os.path.exists(file_path):
+        return FileResponse(
+            path=file_path,
+            filename=filename,
+            media_type='image/png'
+        )
+    else:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
 # Endpoint específico para N8N (formato optimizado)
-@app.route('/n8n/generar-carta', methods=['POST'])
-def generar_carta_n8n():
+@app.post("/n8n/generar-carta")
+async def generar_carta_n8n(datos: Dict[Any, Any], request: Request):
     try:
-        datos = request.json
-        if not datos:
-            return {'error': 'No se enviaron datos'}, 400
-        
         # Generar imagen
         imagen = generar_carta_astral_imagen(datos)
         
@@ -171,7 +188,7 @@ def generar_carta_n8n():
         ruta_archivo = f"static/cartas/{nombre_archivo}"
         imagen.save(ruta_archivo)
         
-        base_url = request.host_url.rstrip('/')
+        base_url = str(request.base_url).rstrip('/')
         
         return {
             'imagen_base64': img_base64,
@@ -181,22 +198,26 @@ def generar_carta_n8n():
         }
         
     except Exception as e:
-        return {'error': str(e), 'success': False}, 500
+        raise HTTPException(
+            status_code=500,
+            detail={'error': str(e), 'success': False}
+        )
 
 # Endpoint para limpiar imágenes antiguas (opcional)
-@app.route('/admin/limpiar-imagenes', methods=['POST'])
-def limpiar_imagenes():
+@app.post("/admin/limpiar-imagenes")
+async def limpiar_imagenes():
     try:
         carpeta = 'static/cartas'
         archivos_eliminados = []
         
-        for archivo in os.listdir(carpeta):
-            if archivo.endswith('.png'):
-                ruta_completa = os.path.join(carpeta, archivo)
-                # Eliminar archivos más antiguos de 24 horas (opcional)
-                if os.path.getctime(ruta_completa) < (datetime.now().timestamp() - 86400):
-                    os.remove(ruta_completa)
-                    archivos_eliminados.append(archivo)
+        if os.path.exists(carpeta):
+            for archivo in os.listdir(carpeta):
+                if archivo.endswith('.png'):
+                    ruta_completa = os.path.join(carpeta, archivo)
+                    # Eliminar archivos más antiguos de 24 horas (opcional)
+                    if os.path.getctime(ruta_completa) < (datetime.now().timestamp() - 86400):
+                        os.remove(ruta_completa)
+                        archivos_eliminados.append(archivo)
         
         return {
             'mensaje': f'Se eliminaron {len(archivos_eliminados)} archivos antiguos',
@@ -204,9 +225,10 @@ def limpiar_imagenes():
         }
         
     except Exception as e:
-        return {'error': str(e)}, 500
+        raise HTTPException(status_code=500, detail={'error': str(e)})
 
-if __name__ == '__main__':
-    # Configuración para Railway/producción
+# Para ejecutar con uvicorn
+if __name__ == "__main__":
+    import uvicorn
     port = int(os.environ.get('PORT', 8000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    uvicorn.run(app, host="0.0.0.0", port=port)
