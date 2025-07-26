@@ -161,7 +161,13 @@ def generar_carta_completa_endpoint(data: CartaAstralInput):
     except Exception as e:
         print(f"ERROR en carta completa: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
-
+@app.route('/test', methods=['GET'])
+def test_simple():
+    return {
+        'status': 'funcionando',
+        'mensaje': 'La aplicación está corriendo correctamente',
+        'endpoint_disponible': True
+    }
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
