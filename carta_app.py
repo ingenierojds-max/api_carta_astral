@@ -1,173 +1,212 @@
-# --- START OF FILE carta_app.py ---
-
-from fastapi import FastAPI, HTTPException, Depends, Header
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-import swisseph as swe
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 import os
-import tempfile
-from pathlib import Path
+import uuid
+from datetime import datetime
+import base64
+import io
 
-# Importar nuestros módulos (ACTUALIZADO - usar el nombre correcto de tu archivo)
-from astral_calculator import realizar_calculo_astral
+# Importar tu módulo de generación de cartas astrales
 from generador_carta_astral_visual import generar_carta_astral_imagen
 
-app = FastAPI()
+app = Flask(__name__)
+CORS(app)  # Permitir CORS para N8N
 
-# --- CONFIGURACIÓN INICIAL ---
-EPH_PATH = "ephe"
-swe.set_ephe_path(EPH_PATH)
+# Crear directorio para guardar imágenes si no existe
+os.makedirs("static/cartas", exist_ok=True)
 
-# ======> PASO 2: Leer la clave secreta desde las variables de entorno <======
-API_KEY_SECRET = os.getenv("API_KEY")
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+    return response
 
-# ======> PASO 3: Crear la función "guardián" (Dependencia) <======
-async def get_api_key(x_api_key: str = Header(None)):
-    """
-    Verifica que la cabecera x-api-key enviada por el cliente
-    coincide con nuestra clave secreta.
-    """
-    if not API_KEY_SECRET:
-        print("ADVERTENCIA: No se ha definido una API_KEY en el entorno. La API no es segura.")
-        return
-
-    if x_api_key != API_KEY_SECRET:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
-
-# --- Modelos ---
-class CartaAstralInput(BaseModel):
-    nombre: str
-    anio: int
-    mes: int
-    dia: int
-    hora: int
-    minuto: int
-    ciudad: str
-    lat: float
-    lng: float
-
-@app.get("/")
-def read_root():
-    return {"status": "Servidor de Carta Astral funcionando correctamente"}
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
-
-# ======> ENDPOINT EXISTENTE (JSON) <======
-@app.post("/carta-astral", dependencies=[Depends(get_api_key)])
-def calcular_carta_astral_endpoint(data: CartaAstralInput):
-    """
-    Endpoint existente que devuelve los datos JSON de la carta astral.
-    """
-    try:
-        resultado_calculado = realizar_calculo_astral(data)
-        return resultado_calculado
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        print(f"ERROR en el motor de cálculo: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno al calcular la carta astral: {str(e)}")
-
-# ======> NUEVO ENDPOINT (IMAGEN) <======
-@app.post("/carta-astral/imagen", dependencies=[Depends(get_api_key)])
-def generar_carta_astral_imagen_endpoint(data: CartaAstralInput):
-    """
-    NUEVO: Endpoint que genera y devuelve la imagen de la carta astral.
-    
-    Uso:
-    POST /carta-astral/imagen
-    Headers: x-api-key: tu_clave_secreta
-    Body: {mismo JSON que el endpoint anterior}
-    
-    Respuesta: Archivo PNG de la carta astral
-    """
-    try:
-        # 1. Calcular los datos de la carta
-        datos_carta = realizar_calculo_astral(data)
-        
-        # 2. Crear archivo temporal para la imagen
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
-            temp_path = tmp_file.name
-        
-        # 3. Generar la imagen
-        generar_carta_astral_imagen(datos_carta, temp_path, tamaño_figura=(10, 10))
-        
-        # 4. Verificar que el archivo se creó
-        if not os.path.exists(temp_path):
-            raise HTTPException(status_code=500, detail="Error generando la imagen")
-        
-        # 5. Devolver la imagen como respuesta
-        filename = f"carta_astral_{data.nombre.replace(' ', '_')}.png"
-        
-        def cleanup():
-            """Limpiar archivo temporal después de enviar la respuesta"""
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-        
-        return FileResponse(
-            path=temp_path,
-            media_type='image/png',
-            filename=filename,
-            background=cleanup  # Limpia automáticamente después del envío
-        )
-        
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        print(f"ERROR generando imagen: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno generando imagen: {str(e)}")
-
-# ======> ENDPOINT COMBINADO (JSON + URL de imagen) <======
-@app.post("/carta-astral/completa", dependencies=[Depends(get_api_key)])
-def generar_carta_completa_endpoint(data: CartaAstralInput):
-    """
-    NUEVO: Endpoint que devuelve tanto los datos JSON como guarda la imagen.
-    
-    Respuesta:
-    {
-        "datos_carta": {...},
-        "imagen_generada": true,
-        "mensaje": "Carta astral calculada e imagen generada exitosamente"
-    }
-    """
-    try:
-        # 1. Calcular los datos
-        datos_carta = realizar_calculo_astral(data)
-        
-        # 2. Crear directorio para imágenes si no existe
-        images_dir = Path("generated_charts")
-        images_dir.mkdir(exist_ok=True)
-        
-        # 3. Generar nombre de archivo único
-        filename = f"carta_{data.nombre.replace(' ', '_')}_{data.anio}_{data.mes}_{data.dia}.png"
-        image_path = images_dir / filename
-        
-        # 4. Generar la imagen
-        generar_carta_astral_imagen(datos_carta, str(image_path), tamaño_figura=(10, 10))
-        
-        # 5. Respuesta completa
-        return {
-            "datos_carta": datos_carta,
-            "imagen_generada": os.path.exists(image_path),
-            "imagen_filename": filename,
-            "mensaje": "Carta astral calculada e imagen generada exitosamente"
+@app.route('/', methods=['GET'])
+def home():
+    return {
+        'aplicacion': 'Generador de Cartas Astrales',
+        'version': '1.0',
+        'status': 'funcionando',
+        'endpoints': {
+            'generar_carta': '/carta-astral/imagen',
+            'test': '/test',
+            'health': '/health'
         }
-        
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        print(f"ERROR en carta completa: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+    }
+
+@app.route('/health', methods=['GET'])
+def health():
+    return {
+        'status': 'ok',
+        'timestamp': str(datetime.now()),
+        'message': 'Servidor funcionando correctamente'
+    }
+
 @app.route('/test', methods=['GET'])
 def test_simple():
     return {
         'status': 'funcionando',
         'mensaje': 'La aplicación está corriendo correctamente',
-        'endpoint_disponible': True
+        'endpoint_disponible': True,
+        'timestamp': str(datetime.now())
     }
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.route('/carta-astral/imagen', methods=['GET', 'POST'])
+def generar_carta():
+    if request.method == 'GET':
+        return {
+            'status': 'ok',
+            'mensaje': 'Endpoint funcionando correctamente',
+            'metodo_requerido': 'POST',
+            'ejemplo_uso': 'Envía datos por POST para generar la carta astral',
+            'formato_datos': {
+                'nombre': 'Nombre de la persona',
+                'fecha_nacimiento': 'YYYY-MM-DD',
+                'hora_nacimiento': 'HH:MM',
+                'lugar_nacimiento': 'Ciudad, País',
+                'latitud': 'Latitud del lugar',
+                'longitud': 'Longitud del lugar'
+            }
+        }
+    
+    try:
+        # Obtener datos del request
+        datos = request.json
+        if not datos:
+            return {'error': 'No se enviaron datos'}, 400
+        
+        # Generar la carta astral (usando tu función existente)
+        imagen = generar_carta_astral_imagen(datos)
+        
+        # Crear nombre único para la imagen
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        unique_id = uuid.uuid4().hex[:8]
+        nombre_archivo = f"carta_astral_{timestamp}_{unique_id}.png"
+        ruta_archivo = f"static/cartas/{nombre_archivo}"
+        
+        # Guardar la imagen en el servidor
+        imagen.save(ruta_archivo)
+        
+        # URL completa para acceder a la imagen
+        base_url = request.host_url.rstrip('/')
+        url_imagen = f"{base_url}/static/cartas/{nombre_archivo}"
+        
+        # También generar versión base64 para N8N
+        img_buffer = io.BytesIO()
+        imagen.save(img_buffer, format='PNG')
+        img_base64 = base64.b64encode(img_buffer.getvalue()).decode()
+        
+        # Respuesta completa con toda la información
+        respuesta = {
+            'success': True,
+            'mensaje': 'Carta astral generada exitosamente',
+            'datos_procesados': {
+                'nombre': datos.get('nombre', 'No especificado'),
+                'fecha': datos.get('fecha_nacimiento', 'No especificada'),
+                'hora': datos.get('hora_nacimiento', 'No especificada'),
+                'lugar': datos.get('lugar_nacimiento', 'No especificado')
+            },
+            'imagen': {
+                'nombre_archivo': nombre_archivo,
+                'ruta_local': ruta_archivo,
+                'url_completa': url_imagen,
+                'url_relativa': f"/static/cartas/{nombre_archivo}",
+                'formato': 'PNG',
+                'timestamp': timestamp
+            },
+            'base64': f"data:image/png;base64,{img_base64}",
+            'para_n8n': {
+                'imagen_url': url_imagen,
+                'imagen_base64': img_base64,
+                'descarga_directa': f"{base_url}/download/{nombre_archivo}"
+            }
+        }
+        
+        return respuesta
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e),
+            'mensaje': 'Error al generar la carta astral',
+            'timestamp': str(datetime.now())
+        }, 500
+
+# Endpoint para servir archivos estáticos (imágenes)
+@app.route('/static/cartas/<filename>')
+def serve_carta_image(filename):
+    try:
+        return send_from_directory('static/cartas', filename)
+    except FileNotFoundError:
+        return {'error': 'Imagen no encontrada'}, 404
+
+# Endpoint para descargar imágenes
+@app.route('/download/<filename>')
+def download_carta(filename):
+    try:
+        return send_from_directory('static/cartas', filename, as_attachment=True)
+    except FileNotFoundError:
+        return {'error': 'Archivo no encontrado'}, 404
+
+# Endpoint específico para N8N (formato optimizado)
+@app.route('/n8n/generar-carta', methods=['POST'])
+def generar_carta_n8n():
+    try:
+        datos = request.json
+        if not datos:
+            return {'error': 'No se enviaron datos'}, 400
+        
+        # Generar imagen
+        imagen = generar_carta_astral_imagen(datos)
+        
+        # Convertir a base64 para N8N
+        img_buffer = io.BytesIO()
+        imagen.save(img_buffer, format='PNG')
+        img_base64 = base64.b64encode(img_buffer.getvalue()).decode()
+        
+        # Guardar también en archivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_archivo = f"carta_n8n_{timestamp}.png"
+        ruta_archivo = f"static/cartas/{nombre_archivo}"
+        imagen.save(ruta_archivo)
+        
+        base_url = request.host_url.rstrip('/')
+        
+        return {
+            'imagen_base64': img_base64,
+            'imagen_url': f"{base_url}/static/cartas/{nombre_archivo}",
+            'nombre_archivo': nombre_archivo,
+            'success': True
+        }
+        
+    except Exception as e:
+        return {'error': str(e), 'success': False}, 500
+
+# Endpoint para limpiar imágenes antiguas (opcional)
+@app.route('/admin/limpiar-imagenes', methods=['POST'])
+def limpiar_imagenes():
+    try:
+        carpeta = 'static/cartas'
+        archivos_eliminados = []
+        
+        for archivo in os.listdir(carpeta):
+            if archivo.endswith('.png'):
+                ruta_completa = os.path.join(carpeta, archivo)
+                # Eliminar archivos más antiguos de 24 horas (opcional)
+                if os.path.getctime(ruta_completa) < (datetime.now().timestamp() - 86400):
+                    os.remove(ruta_completa)
+                    archivos_eliminados.append(archivo)
+        
+        return {
+            'mensaje': f'Se eliminaron {len(archivos_eliminados)} archivos antiguos',
+            'archivos_eliminados': archivos_eliminados
+        }
+        
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+if __name__ == '__main__':
+    # Configuración para Railway/producción
+    port = int(os.environ.get('PORT', 8000))
+    app.run(host='0.0.0.0', port=port, debug=False)
