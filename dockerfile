@@ -16,20 +16,28 @@ WORKDIR /app
 # Copiar requirements primero para aprovechar caché de Docker
 COPY requirements.txt .
 
-# Instalar dependencias de Python
+# Actualizar pip e instalar dependencias de Python
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar todo el código
-COPY . .
+# Copiar archivos necesarios para el build
+COPY build.sh .
+COPY download_eph.py .
 
 # Hacer ejecutable el script de build
 RUN chmod +x build.sh
 
-# Ejecutar script de configuración
+# Ejecutar script de configuración (solo efemérides)
 RUN ./build.sh
 
+# Copiar el resto del código después del build
+COPY . .
+
+# Crear variable de entorno por defecto
+ENV PORT=8000
+
 # Exponer puerto
-EXPOSE 8000
+EXPOSE $PORT
 
 # Comando para iniciar la aplicación
-CMD ["uvicorn", "carta_app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn carta_app:app --host 0.0.0.0 --port $PORT
